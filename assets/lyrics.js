@@ -156,8 +156,18 @@
     slideIn(nextEl, 5, 220);
   }
 
-  function setProgress(p) {
-    lineEl.style.setProperty('--lrc-p', (Math.max(0, Math.min(1, p)) * 100).toFixed(2) + '%');
+  var lastPct = '', lastWriteAt = 0;
+  function setProgress(p, force) {
+    p = Math.max(0, Math.min(1, p));
+    var pct = (p * 100).toFixed(2) + '%';
+    if (pct === lastPct) return;                    // 值没变就别动样式
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    // 逐字填色是 background-clip:text 的渐变断点，改它就等于重排整行文字、走不了合成器；
+    // 每帧写一次就是 60 次/秒重建，限到 ~25 次/秒肉眼分辨不出，换行时强制写一次
+    if (!force && p < 1 && now - lastWriteAt < 40) return;
+    lastPct = pct;
+    lastWriteAt = now;
+    lineEl.style.setProperty('--lrc-p', pct);
   }
 
   // 找出当前时间落在第几行（二分）
@@ -175,8 +185,8 @@
     if (!active || !audio) return;
 
     if (!lyrics.length) {
-      if (curIndex !== -2) { curIndex = -2; setLine(songLabel()); setNext(''); }
-      setProgress(1);
+      if (curIndex !== -2) { curIndex = -2; setLine(songLabel()); setNext(''); setProgress(1, true); }
+      else setProgress(1);
       return schedule();
     }
 
@@ -196,8 +206,9 @@
     // 间奏可能长达几十秒，填充时长封顶，免得一行字慢吞吞填半分钟
     var span = Math.max(0.3, Math.min(end - line.t, 8));
 
-    if (i !== curIndex) { curIndex = i; setLine(line.text); setNext(next ? next.text : ''); }
-    setProgress((t - line.t) / span);
+    var changed = i !== curIndex;
+    if (changed) { curIndex = i; setLine(line.text); setNext(next ? next.text : ''); }
+    setProgress((t - line.t) / span, changed);
     schedule();
   }
 

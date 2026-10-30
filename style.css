@@ -99,7 +99,6 @@ body {
       background-repeat: no-repeat;
       opacity: 0;                                  /* 显隐由 JS 交叉淡入淡出控制 */
       transition: opacity 0.9s ease;
-      will-change: opacity;
       pointer-events: none;
     }
   /* 背景之上的压暗/渐变遮罩（独立一层） */
@@ -117,7 +116,7 @@ body {
   .fixed-bottom {
     position: fixed;
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    right: 20px;
+    right: calc(20px + env(safe-area-inset-right, 0px));
     z-index: 10;
     display: flex;
     align-items: center;
@@ -191,7 +190,7 @@ body {
     cursor: pointer;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    transition: all 0.2s;
+    transition: background .2s ease, color .2s ease, border-color .2s ease;
   }
   .fixed-bottom button:hover {
     background: var(--accent);
@@ -343,8 +342,6 @@ body {
       gap: 8px;
       font-size: 13px;
       color: var(--widget-text);
-      backdrop-filter: blur(28px) saturate(120%);
-      -webkit-backdrop-filter: blur(28px) saturate(120%);
       box-shadow:
         0 4px 16px var(--shadow),
         inset 0 1px 0 rgba(255,255,255,0.04);
@@ -365,8 +362,6 @@ body {
         width: fit-content;
         margin-left: auto;
         margin-right: auto;
-        backdrop-filter: blur(12px) saturate(100%);
-        -webkit-backdrop-filter: blur(12px) saturate(100%);
       box-shadow:
         0 4px 16px var(--shadow),
         inset 0 1px 0 rgba(255,255,255,0.1);
@@ -380,7 +375,7 @@ body {
     font-family: inherit;
     border-radius: 9px;
     cursor: pointer;
-    transition: all 0.25s;
+    transition: background .2s ease, color .2s ease;
     font-weight: 400;
   }
   .tab-btn.active {
@@ -452,9 +447,7 @@ body {
       gap: 14px;
       text-decoration: none;
       color: var(--text);
-      transition: all 0.25s;
-      backdrop-filter: blur(30px) saturate(110%);
-      -webkit-backdrop-filter: blur(30px) saturate(110%);
+      transition: transform .25s ease, background .25s ease, border-color .25s ease, box-shadow .25s ease;
       box-shadow:
         0 4px 16px var(--shadow),
         inset 0 1px 0 rgba(255,255,255,0.04);
@@ -630,9 +623,6 @@ body {
   .contact-card {
       background: linear-gradient(160deg, rgba(15,17,30,0.3) 0%, rgba(10,12,20,0.35) 100%);
       border: 1px solid rgba(255,255,255,0.05);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       border-radius: 18px;
       padding: 16px 20px;
       display: flex;
@@ -640,9 +630,7 @@ body {
       gap: 14px;
       text-decoration: none;
       color: var(--text);
-      transition: all 0.25s;
-      backdrop-filter: blur(30px) saturate(110%);
-      -webkit-backdrop-filter: blur(30px) saturate(110%);
+      transition: transform .25s ease, background .25s ease, border-color .25s ease, box-shadow .25s ease;
       box-shadow:
         0 4px 16px var(--shadow),
         inset 0 1px 0 rgba(255,255,255,0.04);
@@ -801,8 +789,6 @@ body {
   [data-theme="light"] .contact-card {
     background: rgba(255,255,255,0.4);
     border: 1px solid rgba(255,255,255,0.55);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   }
   [data-theme="light"] .contact-card:hover {
@@ -810,9 +796,12 @@ body {
     border-color: rgba(255,255,255,1);
   }
 
-  /* 公祭日灰色 */
-  html.mourning, html.mourning * {
-    filter: grayscale(100%) !important;
+  /* 公祭日灰色：只挂在 html 上。
+     不要再写成 html.mourning * —— 每个元素都带 filter 时，它们会各自成为
+     position:fixed 的包含块，播放器 / 看板娘 / 樱花层会在当天突然改成
+     相对祖先定位、跟着页面滚动；而且逐元素滤镜的重绘量也大得离谱。 */
+  html.mourning {
+    filter: grayscale(100%);
   }
 
   /* 樱花容器 */
@@ -853,8 +842,8 @@ body {
   /* 网易云播放器 左下角 */
   .music-player {
     position: fixed;
-    left: 20px;
-    bottom: 20px;
+    left: calc(20px + env(safe-area-inset-left, 0px));
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     z-index: 10;
     background: var(--btn-bg);
     border: 1px solid var(--btn-border);
@@ -900,7 +889,7 @@ body {
   }
   .pl-current:hover,
   .pl-current:focus-visible,
-  .pl-picker.is-open .pl-current { background: rgba(255,143,171,0.16); border-color: rgba(255,143,171,0.55); outline: none; }
+  .pl-picker.is-open .pl-current { background: rgba(255,143,171,0.16); border-color: rgba(255,143,171,0.55); }
   .pl-name { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
   .pl-count { flex: none; font-size: 12px; opacity: .7; }
   .pl-caret { flex: none; font-size: 11px; opacity: .8; transition: transform .2s; }
@@ -948,7 +937,7 @@ body {
   .pl-opt[aria-checked="true"] { background: rgba(255,143,171,0.16); border-color: rgba(255,143,171,0.45); }
   .pl-opt[aria-checked="true"]::before { background: #ff8fab; border-color: #ff8fab; opacity: 1; }
   .pl-opt:not(:disabled):hover,
-  .pl-opt:focus-visible { background: rgba(255,255,255,0.08); outline: none; }
+  .pl-opt:focus-visible { background: rgba(255,255,255,0.08); }
   .pl-opt:disabled { cursor: wait; }
   .pl-opt.is-loading .pl-opt-label::after { content: ' · 加载中…'; font-weight: 400; opacity: .7; }
   .pl-opt-label { font-weight: 500; }
@@ -1029,13 +1018,20 @@ body {
     border: 1px solid rgba(224, 186, 140, .62);
     border-radius: 12px;
     box-shadow: 0 3px 15px 2px rgba(191, 158, 118, .2);
+    opacity: 0;
+    /* 气泡是不可见的常态：那时既不 blur 背景也不跑晃动的关键帧，
+       否则每一帧都要重新采样它背后的页面（见 waifu-tips-active） */
+    visibility: hidden;
+    transition: opacity 1s, visibility 0s 1s;
+  }
+  .waifu-tips.waifu-tips-active {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity .2s, visibility 0s 0s;
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    opacity: 0;
-    transition: opacity 1s;
     animation: waifu-shake 50s ease-in-out 5s infinite;
   }
-  .waifu-tips.waifu-tips-active { opacity: 1; transition: opacity .2s; }
   /* 带选项的气泡（音乐询问 / 换装菜单）要能点，其余时候气泡不挡鼠标 */
   .waifu-tips { pointer-events: none; }
   .waifu-tips.waifu-tips-active.has-choices { pointer-events: auto; animation: none; }
@@ -1055,7 +1051,7 @@ body {
     transition: background .2s, color .2s;
   }
   .waifu-choice:hover,
-  .waifu-choice:focus-visible { background: rgba(255, 255, 255, .85); color: #0684bd; outline: none; }
+  .waifu-choice:focus-visible { background: rgba(255, 255, 255, .85); color: #0684bd; }
   .waifu-choice.is-primary { color: #fff; background: #e0a060; border-color: #e0a060; }
   .waifu-choice.is-primary:hover,
   .waifu-choice.is-primary:focus-visible { color: #fff; background: #d08a40; }
@@ -1130,7 +1126,8 @@ body {
   }
   .waifu-toggle.waifu-toggle-active { margin-right: -38px; }
   .waifu-toggle.waifu-toggle-active:hover,
-  .waifu-toggle.waifu-toggle-active:focus-visible { margin-right: -20px; }
+  .waifu-toggle.waifu-toggle-active:focus-visible,
+  .waifu-toggle:focus-visible { margin-right: -20px; }
   @keyframes waifu-shake {
     2% { transform: translate(.5px, -1.5px) rotate(-.5deg); }
     4% { transform: translate(.5px, 1.5px) rotate(1.5deg); }
@@ -1145,7 +1142,12 @@ body {
     0%, 22%, 100% { transform: translate(0, 0) rotate(0); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .waifu-tips { animation: none; }
+    .waifu-tips.waifu-tips-active,
+    .header .desc span,
+    #uptime,
+    .music-toggle.is-playing::after {
+      animation: none;
+    }
   }
   /* 手机上不加载看板娘（省流量，也不跟播放器挤） */
   @media (max-width: 640px) {
@@ -1249,8 +1251,18 @@ body {
   /* 收起状态下音乐还在放：按钮轻轻呼吸，免得以为没在响。
      只动阴影不动 transform —— 桌面端手柄的 transform 要留给抽屉位移，不能被动画抢走 */
   @keyframes musicBreath {
-    0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 4px 16px var(--shadow); }
-    50%      { box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 6px 22px var(--accent2); }
+    0%, 100% { opacity: .22; transform: scale(0.96); }
+    50%      { opacity: .78; transform: scale(1.06); }
+  }
+  /* 正在播放时的呼吸光环：独立成伪元素，动的是 opacity / transform，走合成器不重绘阴影 */
+  .music-toggle.is-playing::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: 0 0 0 2px var(--accent2);
+    animation: musicBreath 1.8s ease-in-out infinite;
   }
 
   @media (max-width: 640px) {
@@ -1284,7 +1296,7 @@ body {
     .music-toggle.is-dragging { transform: scale(1.08); }
     /* 拖到屏幕边上：缩小、贴着边站（缩小方向由 JS 设的 transform-origin 决定） */
     .music-toggle.is-docked { transform: scale(0.78); }
-    .music-toggle.is-playing { animation: musicBreath 1.8s ease-in-out infinite; }
+    .music-toggle.is-playing { box-shadow: 0 4px 16px var(--accent2); }
 
     .music-player {
       left: 62px;                      /* 给左下角的小按钮让位 */
@@ -1302,7 +1314,7 @@ body {
       pointer-events: none;
     }
     .music-player.is-collapsed.is-right { transform: translateX(calc(100% + 80px)); }
-    .fixed-bottom { right: 12px; }
+    .fixed-bottom { right: calc(12px + env(safe-area-inset-right, 0px)); }
   }
 
   /* === 桌面端播放器：抽屉。左边一个小手柄，点开滑出，闲置自动收回贴边 ===
@@ -1334,7 +1346,7 @@ body {
       transition: transform 0.34s cubic-bezier(.4,0,.2,1), background 0.2s ease, color 0.2s ease;
     }
     .music-toggle:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .music-toggle.is-playing { animation: musicBreath 1.8s ease-in-out infinite; }
+    .music-toggle.is-playing { box-shadow: 0 4px 16px var(--accent2); }
     /* 抽屉拉开：手柄跟着滑到播放器右边（距离 = 播放器 left 36 + 宽 300）。
        贴上去之后不再需要自己的外阴影，只留顶部内高光，跟播放器拼成一块 */
     .music-toggle.is-drawer-open {

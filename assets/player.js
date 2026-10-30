@@ -76,14 +76,40 @@
     return API + '?' + query + '&source=' + encodeURIComponent(SOURCE) + '&br=' + BR;
   }
 
+  // 接口挂死过：没有超时的话 loadingKey 永远清不掉，choose() 一进来就 return，
+  // 界面会卡在「正在加载歌单…」只能刷新页面。12 秒还没回应就当失败，交给重试。
+  var TIMEOUT_MS = 12000;
+
+  function fetchJson(url, ms) {
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = 0;
+    var timeout = new Promise(function (_, reject) {
+      timer = setTimeout(function () {
+        if (ctl) ctl.abort();
+        reject(new Error('请求超时'));
+      }, ms);
+    });
+    var req = fetch(url, ctl ? { cache: 'no-store', signal: ctl.signal } : { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      });
+    return Promise.race([req, timeout]).then(function (d) {
+      clearTimeout(timer);
+      return d;
+    }, function (e) {
+      clearTimeout(timer);
+      throw e;
+    });
+  }
+
   function request(url, retry) {
     if (retry === undefined) retry = RETRY;
-    return fetch(url, { cache: 'no-store' }).then(function (res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    }).catch(function (err) {
+    // 退避按入参算：以前用全局 RETRY，request(url, 5) 会算出负的等待时间
+    var attempt = retry;
+    return fetchJson(url, TIMEOUT_MS).catch(function (err) {
       if (retry <= 1) throw err;
-      return sleep(600 * (RETRY - retry + 1)).then(function () { return request(url, retry - 1); });
+      return sleep(600 * (attempt - retry + 1)).then(function () { return request(url, retry - 1); });
     });
   }
 

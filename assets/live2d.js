@@ -156,6 +156,8 @@
     clearTimeout(tipTimer);
     clearTimeout(menuTimer);
     menuOpen = false;
+    setExpanded('outfit', false);
+    setExpanded('info', false);
     musicMenuOpen = false;
     tipsEl.dataset.kind = '';
     lastHover = null;
@@ -207,11 +209,21 @@
   tipsEl.addEventListener('mouseenter', mouseOnly(function () { hoverKeep = true; menuStay(); }));
   // 只有消息本该结束了才在移开后收起；气泡内容变化导致的「移出」不会提前关掉新消息
   tipsEl.addEventListener('mouseleave', mouseOnly(function () {
-    hoverKeep = false;
     var focused = document.activeElement;
-    if (menuOpen && !(focused && tipsEl.contains(focused) && focused.tagName === 'INPUT')) menuLeave();
+    // 焦点在气泡里的任何可交互元素上（不只是一言输入框）都别收，键盘用户才点得到选项
+    var keepForFocus = !!(menuOpen && focused && tipsEl.contains(focused));
+    if (!keepForFocus) hoverKeep = false;
+    if (menuOpen && !keepForFocus) menuLeave();
     if (tipExpired && tipPriority >= 0) { tipExpired = false; clearTimeout(tipTimer); tipTimer = setTimeout(endMessage, 1500); }
   }));
+
+  // 键盘用户：Tab 进气泡里的选项时保持展开（原来只认鼠标停留），焦点移出气泡再收
+  tipsEl.addEventListener('focusin', function () { hoverKeep = true; menuStay(); });
+  tipsEl.addEventListener('focusout', function (e) {
+    if (e.relatedTarget && tipsEl.contains(e.relatedTarget)) return;
+    hoverKeep = false;
+    if (menuOpen) menuLeave();
+  });
 
   function welcomeMessage() {
     var h = new Date().getHours();
@@ -308,8 +320,12 @@
   var idleTimer = 0, idleLoop = 0;
   function resetIdle() {
     clearTimeout(idleTimer); clearInterval(idleLoop);
+    // 看板娘退出后 / 页面在后台时不必再武装闲置闲聊：否则动一下鼠标就重新计时，
+    // 闲置 25 秒还会白打一次一言接口
+    if (!on || document.hidden) { idleTimer = idleLoop = 0; return; }
     idleTimer = setTimeout(function () {
       idleLoop = setInterval(function () {
+        if (!on || document.hidden) return;
         if (Math.random() < 0.5) hitokoto();
         else showMessage(['好久没动静了，你还在吗？', '嗨～快来逗我玩吧！', '拿小拳拳锤你胸口！',
           '记得把小家加入收藏夹哦！', '要不要休息一下，喝杯水？'], 6000, 7);
@@ -401,7 +417,7 @@
 
   // 把模型单独渲染到一张离屏纹理上（范围比模型包围盒更大，不受画布裁切），
   // 扫描不透明像素，返回人物真实外框（画布 CSS 像素坐标，可能超出画布）
-  function measure(w, h) {
+  function measure() {
     var r = app.renderer;
     var b0 = model.getBounds();
     if (!b0.width || !b0.height) return null;
@@ -416,17 +432,23 @@
       r.render(model, { renderTexture: rt, clear: true, transform: new PIXI.Matrix(q, 0, 0, q, -bb.x * q, -bb.y * q) });
       var px = r.extract.pixels(rt);
       var top = -1, bottom = -1, left = tw, right = -1;
-      for (var y = 0; y < th; y++) {
-        for (var x = 0; x < tw; x++) {
+      // 每 2 像素扫一次再向四周各扩 2 像素修正边缘：51 万次判断降到 13 万次，
+      // 结果和逐像素扫描只差 1~2px，定位气泡和触摸区够用
+      for (var y = 0; y < th; y += 2) {
+        for (var x = 0; x < tw; x += 2) {
           if (px[(y * tw + x) * 4 + 3] > 40) {
-            if (top < 0) top = y;
-            bottom = y;
+            if (top < 0 || y < top) top = y;
+            if (y > bottom) bottom = y;
             if (x < left) left = x;
             if (x > right) right = x;
           }
         }
       }
       if (top < 0) return null;
+      top = Math.max(0, top - 2);
+      left = Math.max(0, left - 2);
+      bottom = Math.min(th - 1, bottom + 2);
+      right = Math.min(tw - 1, right + 2);
       return { top: bb.y + top / q, bottom: bb.y + (bottom + 1) / q, left: bb.x + left / q, right: bb.x + (right + 1) / q };
     } catch (e) {
       console.warn('[live2d] 测量模型失败：', e);
@@ -445,9 +467,14 @@
     if (document.hidden) { layoutPending = true; return; }
     layoutPending = false;
     var w = canvas.clientWidth, h = canvas.clientHeight;
-    var box = measure(w, h);
-    var availW = w - TOOL_W;
     var pass = model.__pass || 0;
+    // 第 3 轮（pass 2）只加了平移、没再改缩放，外框可以把上一轮的结果按位移推出来：
+    // 省掉一次 GPU 回读（720×720×4 ≈ 2MB）和一次全图像素扫描
+    var box = (pass >= 2 && model.__box && model.__shift)
+      ? { top: model.__box.top + model.__shift.y, bottom: model.__box.bottom + model.__shift.y,
+          left: model.__box.left + model.__shift.x, right: model.__box.right + model.__shift.x }
+      : measure();
+    var availW = w - TOOL_W;
     if (box && pass < 2) {
       model.__pass = pass + 1;
       if (pass === 0) {
@@ -456,10 +483,17 @@
         var f = Math.min(availW * 0.86 / Math.max(1, box.right - box.left),
                          h * 0.97 / Math.max(1, box.bottom - box.top));
         model.__k = Math.max(0.3, Math.min(4, f));
+        model.__box = box;                          // 记下这一轮的外框，下一轮按位移推算
+        model.__shift = { x: 0, y: 0 };
       } else {
         // 水平居中（左右都给摆动留空间），脚底（或截断处）对齐容器底边
-        model.__dx = (model.__dx || 0) + (availW / 2 - (box.left + box.right) / 2);   // 在可用宽度里居中
-        model.__dy = (model.__dy || 0) + (h - box.bottom);
+        var dx = availW / 2 - (box.left + box.right) / 2;                              // 在可用宽度里居中
+        var dy = h - box.bottom;
+        model.__dx = (model.__dx || 0) + dx;
+        model.__dy = (model.__dy || 0) + dy;
+        model.__box = box;                          // 这一轮量到的外框 + 累计位移 = 下一轮的外框
+        model.__shift.x += dx;
+        model.__shift.y += dy;
       }
       fit();
       scheduleLayout(60);
@@ -538,6 +572,13 @@
     }
   }
 
+  // 气泡里带选项的菜单展开时，对应的工具栏按钮报出 aria-expanded
+  function setExpanded(act, open) {
+    if (!toolEl) return;
+    var b = toolEl.querySelector('[data-act="' + act + '"]');
+    if (b) b.setAttribute('aria-expanded', String(!!open));
+  }
+
   function syncUI() {
     syncPageControls();
     document.body.classList.toggle('waifu-on', on);
@@ -553,7 +594,7 @@
     toggle.classList.toggle('waifu-toggle-active', !on && !isMobile());
   }
 
-  function run(action, doneMsg, doneChoices) {
+  function run(action, doneMsg, doneChoices, onFail) {
     busy = true;
     return action()
       .then(function () {
@@ -562,6 +603,11 @@
       })
       .catch(function (err) {
         console.warn('[live2d] 加载失败：', err);
+        // 「换装中…」是 priority 12，这条错误是 10；不清掉它的话 showMessage 会把报错
+        // 直接吞掉，气泡一直挂着「换装中…」等到超时，看起来像卡死了
+        clearTimeout(tipTimer);
+        tipPriority = -1;
+        if (onFail) onFail(err);
         showMessage('呜…模型加载失败了，待会儿再试试吧', 4000, 10);
         syncUI();
       })
@@ -572,6 +618,8 @@
     if (busy || isMobile()) return;
     on = true;
     wrap.hidden = false;                          // 先显示，否则容器尺寸是 0
+    if (window.PIXI && PIXI.Ticker && PIXI.Ticker.shared) PIXI.Ticker.shared.start();
+    resetIdle();
     if (fromUser) { state.hidden = false; save(); }
     syncUI();
     if (model && app) { app.start(); fit(); showMessage(welcomeMessage(), 5000, 11); return; }
@@ -587,11 +635,20 @@
     on = false;
     wrap.hidden = true;
     clearTimeout(tipTimer);
+    // 退出后这些还会跑：闲置闲聊定时器（25 秒一次，一半概率去打一言接口）、
+    // 悬停停留计时、已经排队的 mousemove 帧
+    clearTimeout(idleTimer); clearInterval(idleLoop); idleTimer = idleLoop = 0;
+    clearTimeout(dwellTimer); dwellTimer = 0;
+    if (moveRaf) { cancelAnimationFrame(moveRaf); moveRaf = 0; }
+    overModel = false; lastXY = null;
     tipsEl.classList.remove('waifu-tips-active', 'has-choices');
     tipPriority = -1;
     // 音乐还没选看板娘就走了：交还给页面原来的弹窗
     if (musicAsk) { var h = musicAsk; musicAsk = null; pinned = null; h.fallback(); }
     if (app) app.stop();                          // 藏起来就别再渲染了，省电
+    // 模型的动作 / 眨眼 / 物理挂在 PIXI.Ticker.shared 上推进，app.stop() 只停
+    // Application 自己的 ticker；不停它的话隐藏后仍然每帧 60 次在算
+    if (window.PIXI && PIXI.Ticker && PIXI.Ticker.shared) PIXI.Ticker.shared.stop();
     if (fromUser) { state.hidden = true; save(); }
     syncUI();
     broadcast();
@@ -618,12 +675,13 @@
       '这次要扮演什么呢？现在是' + outfitLabel(),
       '变装！要换哪一件？当前' + outfitLabel()
     ], 2500, 13, outfitChoices());
-    if (menuOpen) tipsEl.dataset.kind = 'outfit';
+    if (menuOpen) { tipsEl.dataset.kind = 'outfit'; setExpanded('outfit', true); }
   }
   // step: 1 下一件，-1 上一件，0 随机（不会随到当前这件）；step 为 null 时直接换到 target 号
   function changeOutfit(step, target) {
     var n = cur().outfits.length;
     if (busy || n < 2) return;
+    var prevOi = oi;                                // 换失败了要退回原来那件，否则按钮提示和实际穿的对不上
     if (step === null) {
       if (target === oi) { showMessage('现在穿的就是' + outfitLabel() + '呀～', 4000, 12, outfitChoices()); return; }
       oi = target;
@@ -632,7 +690,7 @@
     showMessage('换装中…', 8000, 12);
     run(loadModel, function () {
       return ['我的新衣服好看嘛？' + outfitLabel(), '这套' + outfitLabel() + '怎么样？'];
-    }, outfitChoices);
+    }, outfitChoices, function () { oi = prevOi; });
   }
   /* ---- 鼠标停在看板娘身上：和音乐播放器互动 ---- */
   // 模型区域是 pointer-events:none（不挡后面的页面），所以用 mousemove 对照人物外框做命中检测
@@ -681,7 +739,7 @@
   }
   function onModelMove() {
     moveRaf = 0;
-    if (!lastXY) return;
+    if (!lastXY || !on || !modelBox) return;      // 退出了就别再 elementFromPoint（会强制布局）
     // 鼠标在工具栏 / 气泡上时不算
     var el = document.elementFromPoint(lastXY[0], lastXY[1]);
     var onUi = el && (toolEl.contains(el) || tipsEl.contains(el));
@@ -702,7 +760,7 @@
     }
   }
   document.addEventListener('mousemove', function (e) {
-    if (viaTouch()) return;                         // 手指点出来的兼容 mousemove 不算「摸」，触摸屏走下面的触摸区
+    if (viaTouch() || !on) return;                  // 手指点出来的兼容 mousemove 不算「摸」，触摸屏走下面的触摸区
     lastXY = [e.clientX, e.clientY];
     if (!moveRaf) moveRaf = requestAnimationFrame(onModelMove);
   }, { passive: true });
@@ -809,6 +867,7 @@
       { label: '👗 打开衣柜', primary: true, onSelect: openWardrobe },
       { label: '模型来源', title: ABOUT_URL, onSelect: function () { window.open(ABOUT_URL, '_blank', 'noopener'); } }
     ]);
+    if (menuOpen) setExpanded('info', true);
     if (menuOpen) tipsEl.dataset.kind = 'about';
   }
   var infoBtn = toolEl.querySelector('[data-act="info"]');
@@ -845,12 +904,14 @@
       var apply = function () {
         if (d.c === ci && d.o === oi) { showMessage('现在穿的就是这件呀～', 4000, 12); broadcast(); return; }
         var changedChar = d.c !== ci;
+        var prevCi = ci, prevOi = oi;              // 换失败了要退回原来那件
         ci = d.c; oi = d.o;
         showMessage(changedChar ? '正在请 ' + cur().name + ' 过来…' : '换装中…', 8000, 12);
         run(loadModel, function () {
           return changedChar ? (cur().msg || cur().name) + '（衣柜选的' + outfitLabel() + '）'
                              : '这是你在衣柜里挑的' + outfitLabel() + '吗？好看嘛？';
-        }, cur().outfits.length > 1 ? outfitChoices : null);
+        }, cur().outfits.length > 1 ? outfitChoices : null,
+        function () { ci = prevCi; oi = prevOi; });
       };
       if (busy) { setTimeout(function () { channel.onmessage(e); }, 400); return; }
       if (!on) {                                    // 看板娘退出了：先请回来再换
@@ -868,10 +929,12 @@
     hitokoto: hitokoto,
     character: function () {
       if (busy || chars.length < 2) return;
+      var prevCi = ci, prevOi = oi;                // 换失败了要退回原来那位
       ci = (ci + 1) % chars.length;
       oi = 0;
       showMessage('正在请 ' + cur().name + ' 过来…', 8000, 10);
-      run(loadModel, function () { return cur().msg || cur().name; });
+      run(loadModel, function () { return cur().msg || cur().name; }, null,
+          function () { ci = prevCi; oi = prevOi; });
     },
     outfit: function () {
       // 触摸屏没有悬停：点 👕 只开关换装菜单，不直接换下一件（鼠标照旧：悬停出菜单，点击换下一件）
@@ -918,7 +981,14 @@
 
   toolEl.addEventListener('click', function (e) {
     var b = e.target.closest('button[data-act]');
-    if (b && ACTIONS[b.dataset.act]) ACTIONS[b.dataset.act]();
+    if (!b || !ACTIONS[b.dataset.act]) return;
+    ACTIONS[b.dataset.act]();
+    // 键盘触发的 click 没有 detail（鼠标是 1）：菜单展开后把焦点送进第一个选项，
+    // 否则气泡两三秒就收了，键盘用户根本来不及 Tab 进去
+    if (e.detail === 0 && menuOpen) {
+      var first = tipsEl.querySelector('.waifu-choice, .waifu-number input');
+      if (first) { menuStay(); first.focus(); }
+    }
   });
   toggle.addEventListener('click', function () { show(true); });
 

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 
 <!-- ══════════════════════════════════════════════════════════════════════════
      ★ 导航配置区 ★  想改导航，只改这一块就够了，下面的代码一律不用动
@@ -47,7 +47,7 @@ window.NAV_LINKS = [
 <!-- 资源版本号：改完 style.css / player.js / live2d.js 记得把下面几处的 ?v= 一起改
      （站点走 Cloudflare，CSS/JS 边缘缓存 4 小时；不换版本号的话会出现「新 HTML + 旧 CSS」，
       看板娘容器拿不到 position:fixed，整页被顶下去一大块） -->
-<link rel="stylesheet" href="style.css?v=20260926g">
+<link rel="stylesheet" href="style.css?v=20261030a">
 
 </head>
 <body>
@@ -61,7 +61,7 @@ window.NAV_LINKS = [
 <!-- Live2D 看板娘（仿原版 live2d-widget）：文字气泡 + 模型 + 竖排工具栏；模型本身不挡页面点击 -->
 <div class="live2d-wrap" id="live2dWrap" hidden>
   <div class="waifu-tips" id="waifuTips" role="status" aria-live="polite"></div>
-  <canvas class="live2d-canvas" id="live2dCanvas"></canvas>
+  <canvas class="live2d-canvas" id="live2dCanvas" aria-hidden="true"></canvas>
   <div class="waifu-tool" id="waifuTool" role="toolbar" aria-label="看板娘工具栏">
     <button type="button" data-act="hitokoto" title="一言" aria-label="一言"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm3 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm5 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm5 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg></button>
     <button type="button" data-act="character" title="切换角色" aria-label="切换角色"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5z"/></svg></button>
@@ -84,7 +84,7 @@ window.NAV_LINKS = [
       <span class="slider" aria-hidden="true"></span>
     </span>
   </label>
-  <button id="themeBtn" type="button" aria-label="浅色主题" aria-pressed="false">🌙</button>
+  <button id="themeBtn" type="button" aria-label="切换为浅色主题" aria-pressed="false">🌙</button>
 </div>
 
 <main class="container">
@@ -100,7 +100,7 @@ window.NAV_LINKS = [
   </header>
 
   <!-- 一言（音乐播放时这里会被 assets/lyrics.js 换成逐字歌词，停下自动还原） -->
-  <button class="hitokoto" id="hitokoto" type="button" title="点击刷新" aria-label="刷新一言"><span class="hk-text" id="hitokotoText">加载中...</span></button>
+  <button class="hitokoto" id="hitokoto" type="button" title="点击刷新一言"><span class="hk-text" id="hitokotoText">加载中...</span></button>
 
   <!-- 毛玻璃内容区 -->
   <div class="glass-card">
@@ -234,11 +234,20 @@ window.NAV_LINKS = [
   let currentBg = null;
   let nextBg = null;
   let bgInterval = null;
+  // 代际标记：每次关掉轮换都 +1。switchBg() 是 async 的，定时器可能已经触发、
+  // 正卡在 await 里；关掉开关后它醒来如果不认代次，就会把刚淡入的固定图又盖掉
+  let bgGen = 0;
   const AUTO_INTERVAL = 6000; // 6秒
   const FIXED_BG = 'https://cdn.jsdmirror.com/gh/lqay-cn/cdn@main/img/zx/h/%E7%9C%9F%E5%AF%BB1184.png';
 
   // 背景图分两层交替显示，切换时旧图淡出、新图淡入（交叉淡入淡出，不会露出页面底色）
   const BG_LAYERS = [document.getElementById('bgImage'), document.getElementById('bgImage2')];
+
+  // 开关当前状态（DOM 还没就绪时按「关」处理，宁可不换图）
+  function bgEnabled() {
+    const t = document.getElementById('bgToggle');
+    return !!(t && t.checked);
+  }
   let activeLayer = 0;          // 当前显示的是哪一层
   const FADE_MS = 900;          // 与 style.css 里 .bg-image 的 transition 保持一致
 
@@ -302,11 +311,18 @@ window.NAV_LINKS = [
   }
 
   async function switchBg() {
+    const gen = bgGen;                 // 记下发起时的代次
     try {
       // 使用预加载的图片，如果没有就立即加载
       let newBgUrl = nextBg;
       nextBg = null;
       if (!newBgUrl) newBgUrl = await fetchBgBlob();
+
+      // 等待期间用户关掉了开关（或又重开过一轮）：这次结果作废，别把固定图盖掉
+      if (gen !== bgGen || !bgEnabled()) {
+        if (newBgUrl) URL.revokeObjectURL(newBgUrl);
+        return;
+      }
 
       const oldBg = currentBg;
       currentBg = newBgUrl;
@@ -333,16 +349,21 @@ window.NAV_LINKS = [
 
   // 自动切换背景
   function startBgAuto() {
-    clearInterval(bgInterval);
+    clearTimeout(bgInterval);
+    bgInterval = null;
     // 使用 setTimeout 递归，确保间隔固定，避免重叠
     function scheduleNext() {
+      clearTimeout(bgInterval);
       bgInterval = setTimeout(() => {
-        switchBg().then(() => scheduleNext());
+        bgInterval = null;
+        if (!bgEnabled()) return;      // 关掉开关后不再排下一轮
+        switchBg().then(() => { if (bgEnabled()) scheduleNext(); });
       }, AUTO_INTERVAL);
     }
     scheduleNext();
   }
   function stopBgAuto() {
+    bgGen++;                           // 让已经发起的 switchBg 醒来后作废
     clearTimeout(bgInterval);
     bgInterval = null;
   }
@@ -352,8 +373,15 @@ window.NAV_LINKS = [
     const html = document.documentElement;
     const toggle = document.getElementById('bgToggle');
 
+    // 隐私模式 / 禁用存储时 sessionStorage 读写会抛 SecurityError，
+    // 一抛就会把下面整个初始化块（两个开关的监听）全部中断，所以统一包一层
+    const store = {
+      get(key) { try { return sessionStorage.getItem(key); } catch (e) { return null; } },
+      set(key, value) { try { sessionStorage.setItem(key, value); } catch (e) { /* 存不了照样能用 */ } }
+    };
+
     // === 主题初始化：手动优先级 > 时间自动（会话级别）===
-    const savedTheme = sessionStorage.getItem('theme');
+    const savedTheme = store.get('theme');
     if (savedTheme === 'light') {
       html.setAttribute('data-theme', 'light');
     } else if (savedTheme !== 'dark') {
@@ -363,15 +391,16 @@ window.NAV_LINKS = [
     function syncThemeButton() {
       const light = html.getAttribute('data-theme') === 'light';
       const button = document.getElementById('themeBtn');
+      // 图标显示「当前是什么」，无障碍名和 title 说「点了会变成什么」
       button.textContent = light ? '☀️' : '🌙';
-      button.setAttribute('aria-label', '浅色主题');
+      button.setAttribute('aria-label', light ? '切换为深色主题' : '切换为浅色主题');
       button.setAttribute('aria-pressed', String(light));
       button.title = light ? '切换为深色主题' : '切换为浅色主题';
     }
     syncThemeButton();
 
     // === 背景自动切换初始化 ===
-    const autoBg = sessionStorage.getItem('autoBg');
+    const autoBg = store.get('autoBg');
     if (autoBg === 'off') {
       toggle.checked = false;
       stopBgAuto();
@@ -387,10 +416,10 @@ window.NAV_LINKS = [
     document.getElementById('themeBtn').addEventListener('click', function() {
       if (html.getAttribute('data-theme') === 'light') {
         html.removeAttribute('data-theme');
-        sessionStorage.setItem('theme', 'dark');
+        store.set('theme', 'dark');
       } else {
         html.setAttribute('data-theme', 'light');
-        sessionStorage.setItem('theme', 'light');
+        store.set('theme', 'light');
       }
       syncThemeButton();
     });
@@ -400,10 +429,10 @@ window.NAV_LINKS = [
       if (this.checked) {
         switchBg();
         startBgAuto();
-        sessionStorage.setItem('autoBg', 'on');
+        store.set('autoBg', 'on');
       } else {
         stopBgAuto();
-        sessionStorage.setItem('autoBg', 'off');
+        store.set('autoBg', 'off');
         // 切回固定图（淡入淡出），并清理预加载，避免关闭后仍请求 API
         showFixedBg();
       }
@@ -490,7 +519,7 @@ window.NAV_LINKS = [
       });
       musicAssetsPromise = styleReady
         .then(() => window.APlayer ? null : loadScript('assets/APlayer.min.js?v=20260920c'))
-        .then(() => loadScript('assets/player.js?v=20260925q'))
+        .then(() => loadScript('assets/player.js?v=20261030a'))
         .catch(error => {
           console.warn('[music] 加载失败：', error);
           slot.textContent = '🎵 加载失败，收起后可重试';
@@ -929,7 +958,7 @@ window.NAV_LINKS = [
   <div id="musicPlayer" aria-live="polite">🎵 点击展开以加载音乐</div>
 </div>
 <button class="music-toggle" id="musicToggle" type="button" aria-expanded="false" aria-controls="musicPanel" aria-label="展开音乐播放器" title="展开音乐播放器">🎵</button>
-<script src="assets/lyrics.js?v=20260926g"></script>
-<script src="assets/live2d.js?v=20260925p"></script>
+<script src="assets/lyrics.js?v=20261030a"></script>
+<script src="assets/live2d.js?v=20261030a"></script>
 </body>
 </html>
