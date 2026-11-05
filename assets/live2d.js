@@ -15,7 +15,7 @@
  * 角色 / 服装清单在 assets/live2d-models.json：
  *   default = { c, o }：首次访问的默认角色 / 服装下标
  *   characters[i].outfits[j] = { name, model, textures? }
- * 工具栏还接管了页面原来底部的「主题」「随机背景」两个开关：看板娘显示时底部控件条隐藏，
+ * 工具栏还接管了页面原来底部的「主题」开关：看板娘显示时底部控件条隐藏，
  * 退出看板娘（或手机端）时底部控件条恢复显示。
  * 首访「要不要播放音乐」也交给看板娘：页面通过 window.__live2dWidget.askMusic() 让她在气泡里
  * 常驻提问，用户选了才收起；看板娘不在时页面退回原来的弹窗。
@@ -255,7 +255,7 @@
     ['#waifuTool [data-act="character"]', ['你是不是不爱人家了呀，呜呜呜～', '要见见我的姐姐嘛？', '想要看我妹妹嘛？', '要切换看板娘吗？']],
     ['#waifuTool [data-act="photo"]', ['你要给我拍照呀？一二三～茄子～', '要不，我们来合影吧！', '保持微笑就好了～']],
     ['#waifuTool [data-act="theme"]', ['要换个主题吗？', '深色浅色，你更喜欢哪个呢？', '天黑了就开深色模式吧～']],
-    ['#waifuTool [data-act="background"]', ['不喜欢现在的背景吗？', '背景可以随机切换哦～', '要不要换换风景？']],
+
     ['#waifuTool [data-act="quit"]', ['到了要说再见的时候了吗？', '呜呜 QAQ 后会有期……', '不要抛弃我呀……', '我们，还能再见面吗……', '哼，你会后悔的！']],
     ['.link-card', function (el) {
       var n = el.querySelector('.card-name');
@@ -264,7 +264,7 @@
     ['.contact-card', ['要来群里一起玩吗？', '加入我们吧，这里有很多有趣的人哦！']],
     ['#hitokoto', ['点一下就能换一句一言哦～', '这句话你喜欢吗？']],
     ['#themeBtn', ['要换个主题吗？', '深色浅色，你更喜欢哪个呢？']],
-    ['.toggle-wrap', ['不喜欢现在的背景吗？', '背景可以随机切换哦～']],
+
     ['#musicToggle', ['要听点音乐吗？', '来首歌放松一下吧～']],
     ['.tab-btn', ['导航和社群都可以看看哦～']],
     ['.avatar', ['这是我家主人的头像哦(*´∇｀*)', '好看吗？']]
@@ -552,23 +552,15 @@
   }
 
   /* ======================= 显隐 / 工具栏 ======================= */
-  // 主题 / 随机背景：沿用页面原有的 #themeBtn、#bgToggle 逻辑，工具栏只是代点
+  // 主题：沿用页面原有的 #themeBtn 逻辑，工具栏只是代点
   var themeBtn = document.getElementById('themeBtn');
-  var bgToggle = document.getElementById('bgToggle');
   function syncPageControls() {
     var bt = toolEl.querySelector('[data-act="theme"]');
-    var bb = toolEl.querySelector('[data-act="background"]');
     if (bt) {
       var light = document.documentElement.getAttribute('data-theme') === 'light';
       bt.hidden = !themeBtn;
       bt.title = light ? '切换为深色主题' : '切换为浅色主题';
       bt.setAttribute('aria-pressed', String(light));
-    }
-    if (bb) {
-      bb.hidden = !bgToggle;
-      var auto = !!(bgToggle && bgToggle.checked);
-      bb.title = auto ? '随机背景：开（点击关闭）' : '随机背景：关（点击开启）';
-      bb.setAttribute('aria-pressed', String(auto));
     }
   }
 
@@ -961,13 +953,6 @@
       syncUI();
       var light = document.documentElement.getAttribute('data-theme') === 'light';
       showMessage(light ? '浅色主题，看起来清爽多了～' : '深色主题，晚上看着更舒服哦～', 4000, 10);
-    },
-    background: function () {
-      if (!bgToggle) return;
-      bgToggle.checked = !bgToggle.checked;
-      bgToggle.dispatchEvent(new Event('change', { bubbles: true }));
-      syncUI();
-      showMessage(bgToggle.checked ? '随机背景已开启，隔一会儿就换一张～' : '随机背景已关闭，换回固定背景啦。', 4000, 10);
     },
     info: function () {
       if (viaTouch() && menuOpen && tipsEl.dataset.kind === 'about') { endMessage(); return; }   // 触摸屏再点一下收起

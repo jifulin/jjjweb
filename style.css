@@ -90,15 +90,15 @@ body {
     display: flex;
     flex-direction: column;
   }
+  /* 背景图地址在 index.html 的 SITE_BG（导航配置下面一行），这里只定位置和兜底色 */
   .bg-image {
       position: fixed;
       inset: 0;
       z-index: 0;
-      background-size: cover;
+      background-color: #0b0d14;
       background-position: center;
+      background-size: cover;
       background-repeat: no-repeat;
-      opacity: 0;                                  /* 显隐由 JS 交叉淡入淡出控制 */
-      transition: opacity 0.9s ease;
       pointer-events: none;
     }
   /* 背景之上的压暗/渐变遮罩（独立一层） */
@@ -121,59 +121,6 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
-  }
-  .toggle-wrap {
-    display: flex;
-    min-height: 44px;
-    cursor: pointer;
-    align-items: center;
-    gap: 6px;
-    background: var(--btn-bg);
-    border: 1px solid var(--btn-border);
-    border-radius: 8px;
-    padding: 4px 10px 4px 8px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-  .toggle-label {
-    font-size: 12px;
-    color: var(--btn-text);
-    user-select: none;
-    white-space: nowrap;
-  }
-  /* Toggle 开关 */
-  .switch {
-    position: relative;
-    display: inline-block;
-    width: 44px;
-    height: 28px;
-    flex-shrink: 0;
-  }
-  .switch input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
-  .slider {
-    position: absolute;
-    inset: 0;
-    background: rgba(255,255,255,0.2);
-    border-radius: 28px;
-    cursor: pointer;
-    transition: background 0.25s;
-  }
-  .slider::before {
-    content: '';
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    left: 2px;
-    top: 2px;
-    background: #fff;
-    border-radius: 50%;
-    transition: transform 0.25s;
-  }
-  .switch input:checked + .slider { background: var(--accent); }
-  .switch input:checked + .slider::before { transform: translateX(16px); }
-  .switch input:focus-visible + .slider {
-    outline: 3px solid var(--focus-ring);
-    outline-offset: 3px;
   }
   .fixed-bottom button {
     width: 44px;
@@ -1094,7 +1041,7 @@ body {
   }
   .waifu-tool button[hidden] { display: none; }
   .waifu-tool button[aria-pressed="false"] svg { opacity: .55; }
-  /* 看板娘显示时，底部控件条（随机背景 / 主题）已收进工具栏 */
+  /* 看板娘显示时，底部控件条（主题）已收进工具栏 */
   body.waifu-on .fixed-bottom { display: none; }
   .waifu-tool svg {
     width: 24px;
