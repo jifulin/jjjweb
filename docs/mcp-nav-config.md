@@ -11,7 +11,7 @@ Fork 这个仓库之后，**改导航只需要动 `index.html` 最前面那一�
 window.NAV_COLUMNS = 'auto';
 
 window.NAV_LINKS = [
-  { name: '主页', desc: '雾光庭院主页', url: 'https://wgty.top', icon: 'https://.../1.jpg' },
+  { name: '主页', desc: '吉急吉主页', url: 'https://wgty.top', icon: 'https://.../1.jpg' },
   { name: '博客', desc: '个人博客站点', url: 'https://blog.wgty.top', icon: 'https://.../2.jpg' }
 ];
 </script>
